@@ -1,0 +1,9 @@
+message BatteryGraph {
+    repeated BatteryState states = 1;
+}
+
+message BatteryState {
+    required uint32 timestamp = 1;
+    required float level = 2;
+    required bool charging = 3;
+}
