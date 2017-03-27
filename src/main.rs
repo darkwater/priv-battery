@@ -47,16 +47,16 @@ fn get_battery_status() -> (f32, bool) {
     let battery_path = Path::new(&battery_presence);
 
     // Get battery level
-    let file_contents   = read_file(battery_path.join("/energy_now")).expect("Couldn't read battery/energy_now.");
-    let energy_now: f32 = str::parse(&file_contents.trim())          .expect("Expected a number from battery/energy_now.");
+    let file_contents   = read_file(battery_path.join("energy_now")).expect("Couldn't read battery/energy_now.");
+    let energy_now: f32 = str::parse(&file_contents.trim())         .expect("Expected a number from battery/energy_now.");
 
-    let file_contents    = read_file(battery_path.join("/energy_full")).expect("Couldn't open battery/energy_full.");
-    let energy_full: f32 = str::parse(&file_contents.trim())           .expect("Expected a number from battery/energy_full.");
+    let file_contents    = read_file(battery_path.join("energy_full")).expect("Couldn't open battery/energy_full.");
+    let energy_full: f32 = str::parse(&file_contents.trim())          .expect("Expected a number from battery/energy_full.");
 
     let level = energy_now * 100.0 / energy_full;
 
     // Get battery charging status
-    let file_contents = read_file(battery_path.join("/status")).expect("Couldn't open battery/status.");
+    let file_contents = read_file(battery_path.join("status")).expect("Couldn't open battery/status.");
 
     let charging = match file_contents.trim() {
         "Charging" => true,
@@ -68,6 +68,37 @@ fn get_battery_status() -> (f32, bool) {
 }
 
 fn prune_old() {
+    let con = get_redis_connection();
+    let buffer: Vec<u8> = con.get("battery:surface").unwrap();
+    let mut graph: BatteryGraph = protobuf::parse_from_bytes(&buffer).unwrap();
+
+    {
+        let mut states = graph.mut_states();
+        let oldest_timestamp = std::time::UNIX_EPOCH.elapsed().unwrap().as_secs() as u32 - (60 * 60 * 6); // 6 hours ago
+        let newest_timestamp = std::time::UNIX_EPOCH.elapsed().unwrap().as_secs() as u32 - (60 * 30);     // 30 minutes ago
+
+        states.reverse();
+
+        let mut split_index = 0;
+        for (index, state) in states.iter().enumerate() {
+            let full = state.get_level() >= 100.0;
+            let too_new = state.get_timestamp() > newest_timestamp;
+            let too_old = state.get_timestamp() < oldest_timestamp;
+
+            if (full && !too_new) || too_old {
+                split_index = index;
+                break;
+            }
+        }
+
+        let new_length = split_index + 1;
+        states.truncate(new_length);
+        states.reverse();
+    }
+
+    let buffer = graph.write_to_bytes().unwrap();
+    let a: () = con.set("battery:surface", buffer).unwrap();
+    println!("{:?}", a);
 }
 
 fn get_redis_connection() -> redis::Connection {
@@ -118,28 +149,24 @@ fn show_window() {
     let _ = css_provider.load_from_data("
     window {
         background-color: #1d1f21;
-        font-size: 12px;
     }
 
     #header {
         color: #efefef;
-        font-size: 2.0em;
         padding: 15px 20px;
         padding-bottom: 10px;
     }
 
     #subheader {
-        color: #ababab;
-        font-size: 1.3em;
+        color: #abdbfb;
         padding: 0px 20px;
         padding-bottom: 15px;
         /* margin-bottom: 20px; */
-        border-bottom: 1px solid #808080;
     }
     ");
     gtk::StyleContext::add_provider_for_screen(&screen, &css_provider, gtk::STYLE_PROVIDER_PRIORITY_APPLICATION);
 
-    window.set_size_request(400, 500);
+    window.set_size_request(500, 400);
 
     let grid = gtk::Grid::new();
     grid.set_hexpand(true);

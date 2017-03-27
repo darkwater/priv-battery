@@ -62,7 +62,7 @@ dependencies = [
 [[package]]
 name = "gdk"
 version = "0.5.1"
-source = "git+https://github.com/gtk-rs/gdk.git#26a4c2825b485da6852146d633c4521280163b20"
+source = "git+https://github.com/gtk-rs/gdk.git#c2ab3110e4190dc1e463de71c43f6c58e73b63b2"
 dependencies = [
  "bitflags 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "cairo-rs 0.1.1 (git+https://github.com/gtk-rs/cairo.git)",
@@ -176,7 +176,7 @@ dependencies = [
 [[package]]
 name = "gtk"
 version = "0.1.1"
-source = "git+https://github.com/gtk-rs/gtk.git#b266e67c78b45622a3ed84051ccbe47a18e23a00"
+source = "git+https://github.com/gtk-rs/gtk.git#0de27a521aae4f9c31b119feff9a5a9728a2319d"
 dependencies = [
  "bitflags 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "cairo-rs 0.1.1 (git+https://github.com/gtk-rs/cairo.git)",
