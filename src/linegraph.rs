@@ -15,19 +15,10 @@ pub fn create_linegraph(graph: BatteryGraph) -> gtk::DrawingArea {
         let width  = widget.get_allocated_width()  as f64;
         let height = widget.get_allocated_height() as f64;
 
-        context.set_font_size(12.0);
-        context.select_font_face("Droid Sans Mono",
-                                 cairo::enums::FontSlant::Normal,
-                                 cairo::enums::FontWeight::Normal);
-
-        // let extents = context.text_extents(text);
-        // let x = width  / 2.0 - extents.width  / 2.0 - extents.x_bearing;
-        // let y = height / 2.0 - extents.height / 2.0 - extents.y_bearing;
-
-        let graph_left   = 100.0;
+        let graph_left   = 70.0;
         let graph_top    = 50.0;
-        let graph_right  = width - 10.0;
-        let graph_bottom = height - 50.0;
+        let graph_right  = width - 20.0;
+        let graph_bottom = height - 80.0;
         let graph_width  = graph_right - graph_left;
         let graph_height = graph_bottom - graph_top;
 
@@ -48,15 +39,27 @@ pub fn create_linegraph(graph: BatteryGraph) -> gtk::DrawingArea {
 
             context.stroke();
             context.translate(-0.5, -0.5);
+
+            context.set_font_size(16.0);
+            context.select_font_face("Droid Sans",
+                                     cairo::enums::FontSlant::Normal,
+                                     cairo::enums::FontWeight::Normal);
+
+            context.set_source_rgba(1.0, 1.0, 1.0, 0.3);
+            for &(text, y) in [ ("100%", graph_top),
+                               ("50%", graph_top + graph_height / 2.0),
+                               ("0%", graph_bottom) ].iter() {
+                let extents = context.text_extents(text);
+                let x = graph_left - 10.0 - extents.width - extents.x_bearing;
+                let y = y - extents.height / 2.0 - extents.y_bearing;
+
+                context.move_to(x, y);
+                context.show_text(text);
+            }
         }
 
         let states = graph.get_states();
         draw_graph_line((graph_left, graph_top, graph_width, graph_height), states, &context);
-
-        // context.move_to(x, y);
-        // context.show_text(text);
-
-        // let used_width = extents.width + 30.0;
 
         Inhibit(false)
     });
@@ -67,29 +70,70 @@ pub fn create_linegraph(graph: BatteryGraph) -> gtk::DrawingArea {
 fn draw_graph_line((x, y, width, height): (f64, f64, f64, f64), states: &[BatteryState], context: &cairo::Context) {
     context.translate(x, y);
 
-    let (r, g, b, a) = (0.7, 0.9, 1.0, 1.0);
-    context.set_source_rgba(r, g, b, a);
+    let num_states   = states.len();
+    let first_state  = states.first().unwrap();
+    let last_state   = states.last().unwrap();
 
-    let num_states      = states.len();
-    let first_timestamp = states.first().unwrap().get_timestamp() as f64;
-    let last_timestamp  = states.last().unwrap().get_timestamp() as f64;
+    let sample_threshold = last_state.get_timestamp() - (60 * 5);
+    let sample_state     = states.iter().rev().find(|state| state.get_timestamp() < sample_threshold).unwrap();
+
+    let estimated_ratio = {
+        let time  = (last_state.get_timestamp() - sample_state.get_timestamp()) as f64;
+        let level = (last_state.get_level()     - sample_state.get_level()) as f64;
+
+        level / time
+    };
+
+    let estimated_time = last_state.get_level() as f64 / estimated_ratio.abs();
+
+    {
+        let estimated_text = {
+            let hours   = (estimated_time / 3600.0) as i32;
+            let minutes = (estimated_time / 60.0 % 60.0) as i32;
+
+            &format!("{}h {}m left", hours, minutes)
+        };
+
+        context.set_source_rgba(1.0, 1.0, 1.0, 0.3);
+        context.set_font_size(16.0);
+        context.select_font_face("Droid Sans",
+                                 cairo::enums::FontSlant::Normal,
+                                 cairo::enums::FontWeight::Normal);
+
+        context.set_source_rgba(1.0, 1.0, 1.0, 0.3);
+        let extents = context.text_extents(estimated_text);
+        let x = width - extents.width - extents.x_bearing;
+        let y = height + 10.0 - extents.y_bearing;
+
+        context.move_to(x, y);
+        context.show_text(estimated_text);
+    }
 
     let mut states = states.iter();
     let first_state = states.next().unwrap();
     context.move_to(0.0, height - first_state.get_level() as f64 / 100.0 * height);
 
+    let time_window = last_state.get_timestamp() as f64 + estimated_time - first_state.get_timestamp() as f64;
+
     for state in states {
-        let x = (state.get_timestamp() as f64 - first_timestamp) / (last_timestamp - first_timestamp) * width;
+        let x = (state.get_timestamp() - first_state.get_timestamp()) as f64 / time_window * width;
         let y = height - state.get_level() as f64 / 100.0 * height;
 
         context.line_to(x, y);
     }
 
+    let (r, g, b, a) = (0.7, 0.9, 1.0, 1.0);
+    context.set_source_rgba(r, g, b, a);
     context.set_line_width(4.0);
     context.set_line_cap(cairo::LineCap::Round);
     context.stroke_preserve();
 
     context.line_to(width, height);
+    context.set_line_width(2.0);
+    context.set_line_cap(cairo::LineCap::Round);
+    context.set_dash(&[0.0, 8.0], 4.0);
+    context.stroke_preserve();
+
     context.line_to(0.0, height);
     context.close_path();
 
